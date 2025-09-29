@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Graph Quan hệ Doanh nghiệp</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+    }
+    h2 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+    .graph-container {
+      position: relative;
+      display: inline-block;
+    }
+    svg {
+      border: 1px solid #ccc;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      cursor: grab;
+    }
+    .controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .controls button {
+      background: #3498db;
+      color: #fff;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .controls button:hover {
+      background: #2980b9;
+    }
+    .node circle {
+      stroke: #333;
+      stroke-width: 1.5px;
+    }
+    .node text {
+      font-size: 12px;
+      pointer-events: none;
+      fill: #000;
+      font-weight: bold;
+    }
+    .link {
+      stroke: #999;
+      stroke-opacity: 0.6;
+    }
+    .arrowhead {
+      fill: #999;
+    }
+    .link-label {
+      font-size: 11px;
+      fill: #555;
+    }
+  </style>
+</head>
+<body>
+  <h2>Quan hệ doanh nghiệp & cá nhân</h2>
+  <div class="graph-container">
+    <svg width="1000" height="700"></svg>
+    <div class="controls">
+      <button id="zoom_in">+</button>
+      <button id="zoom_out">−</button>
+    </div>
+  </div>
+
+  <script>
+    const data = {
+      nodes: [
+        { id: "Công ty A", group: 1 },
+        { id: "Công ty B", group: 1 },
+        { id: "Công ty C", group: 1 },
+        { id: "Công ty D", group: 1 },
+        { id: "Công ty G", group: 1 },
+        { id: "Công ty H", group: 1 },
+        { id: "Ông A", group: 2 },
+        { id: "Bà C", group: 2 },
+        { id: "Ông X", group: 2 },
+        { id: "Chuyển tiền T1", group: 3 }
+      ],
+      links: [
+        { source: "Công ty B", target: "Công ty C", type: "Cùng sở hữu 20%" },
+        { source: "Công ty B", target: "Công ty D", type: "Hợp đồng dịch vụ" },
+        { source: "Công ty D", target: "Công ty H", type: "Khoản vay ngược" },
+        { source: "Công ty H", target: "Công ty G", type: "Đầu tư lại" },
+        { source: "Ông A", target: "Bà C", type: "Vợ chồng" },
+        { source: "Ông A", target: "Công ty H", type: "Cổ đông 30%" },
+        { source: "Bà C", target: "Công ty H", type: "Cổ đông 30%" },
+        { source: "Công ty H", target: "Ông X", type: "Cổ đông 40%" },
+        { source: "Bà C", target: "Công ty B", type: "Giám đốc" },
+        { source: "Ông A", target: "Công ty B", type: "Cổ đông 35%" },
+        { source: "Công ty D", target: "Chuyển tiền T1", type: "Chuyển 5 tỷ" },
+        { source: "Chuyển tiền T1", target: "Công ty G", type: "Nhận tiền" }
+      ]
+    };
+
+    const svg = d3.select("svg"),
+          width = +svg.attr("width"),
+          height = +svg.attr("height");
+
+    const container = svg.append("g");
+
+    // Arrow marker
+    svg.append("defs").selectAll("marker")
+      .data(["arrow"])
+      .enter().append("marker")
+        .attr("id", "arrow")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 30)
+        .attr("refY", 0)
+        .attr("markerWidth", 6)
+        .attr("markerHeight", 6)
+        .attr("orient", "auto")
+      .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("class", "arrowhead");
+
+    const color = d3.scaleOrdinal(d3.schemeSet2);
+
+    const simulation = d3.forceSimulation(data.nodes)
+        .force("link", d3.forceLink(data.links).id(d => d.id).distance(200))
+        .force("charge", d3.forceManyBody().strength(-500))
+        .force("center", d3.forceCenter(width / 2, height / 2));
+
+    const link = container.append("g")
+        .attr("class", "links")
+      .selectAll("line")
+      .data(data.links)
+      .enter().append("line")
+        .attr("class", "link")
+        .attr("stroke-width", 2)
+        .attr("marker-end", "url(#arrow)");
+
+    const node = container.append("g")
+        .attr("class", "nodes")
+      .selectAll("g")
+      .data(data.nodes)
+      .enter().append("g");
+
+    node.append("circle")
+        .attr("r", 25)
+        .attr("fill", d => color(d.group))
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended));
+
+    node.append("text")
+        .text(d => d.id)
+        .attr('text-anchor', 'middle')
+        .attr('dy', 5);
+
+    const linkLabels = container.append("g")
+        .selectAll("text")
+        .data(data.links)
+        .enter().append("text")
+        .attr("class", "link-label")
+        .text(d => d.type);
+
+    simulation.on("tick", () => {
+      link
+          .attr("x1", d => d.source.x)
+          .attr("y1", d => d.source.y)
+          .attr("x2", d => d.target.x)
+          .attr("y2", d => d.target.y);
+
+      node
+          .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      linkLabels
+          .attr("x", d => (d.source.x + d.target.x) / 2)
+          .attr("y", d => (d.source.y + d.target.y) / 2);
+    });
+
+    // Zoom
+    const zoom = d3.zoom()
+      .scaleExtent([0.3, 3])
+      .on("zoom", (event) => {
+        container.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+
+    // Zoom control
+    const zoomStep = 0.2;
+    d3.select("#zoom_in").on("click", () => {
+      svg.transition().call(zoom.scaleBy, 1 + zoomStep);
+    });
+    d3.select("#zoom_out").on("click", () => {
+      svg.transition().call(zoom.scaleBy, 1 - zoomStep);
+    });
+
+    // Drag functions
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+  </script>
+</body>
+</html>
